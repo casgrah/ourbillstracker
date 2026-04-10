@@ -190,9 +190,12 @@ main{flex:1;padding:20px 24px;max-width:1200px;margin:0 auto;width:100%}
         <div class="panel">
           <div class="panel-header">
             <h2 id="bills-panel-title">House bills</h2>
-            <div class="progress-wrap">
-              <div class="progress-bar"><div class="progress-fill" id="bills-progress" style="width:0%"></div></div>
-              <span class="progress-label" id="bills-progress-label">0 / 0</span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button onclick="openAddBillThisMonth()" style="background:none;border:1px solid var(--border-strong);border-radius:6px;padding:4px 10px;font-family:var(--sans);font-size:11px;color:var(--text-mid);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border-strong)';this.style.color='var(--text-mid)'">+ One-time bill</button>
+              <div class="progress-wrap">
+                <div class="progress-bar"><div class="progress-fill" id="bills-progress" style="width:0%"></div></div>
+                <span class="progress-label" id="bills-progress-label">0 / 0</span>
+              </div>
             </div>
           </div>
           <table class="bill-table">
@@ -313,6 +316,23 @@ main{flex:1;padding:20px 24px;max-width:1200px;margin:0 auto;width:100%}
   </div>
 </div>
 
+
+<!-- One-time bill modal -->
+<div class="modal-bg" id="onetime-modal">
+  <div class="modal">
+    <h3>Add one-time bill</h3>
+    <div class="sub" id="onetime-modal-sub">Adds to this month only — not the master list</div>
+    <div class="field"><label>Bill name / payee</label><input type="text" id="ot-name" placeholder="e.g. Car repair"/></div>
+    <div class="field"><label>Due day (optional)</label><input type="number" id="ot-due" placeholder="e.g. 15" min="1" max="31"/></div>
+    <div class="field"><label>Amount due</label><input type="number" id="ot-min" placeholder="0.00" step="0.01"/></div>
+    <div class="field"><label>Notes (optional)</label><input type="text" id="ot-notes" placeholder="optional"/></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveOnetimeBill()">Add to this month</button>
+      <button class="btn btn-secondary" onclick="closeModal('onetime-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -345,10 +365,30 @@ function isCaitlinPayday(date) {
 }
 
 function toISO(d) { return d.toISOString().slice(0,10); }
+function parseAnyDate(str) {
+  if (!str) return null;
+  str = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T00:00:00');
+  const p = str.split('/');
+  if (p.length >= 2) {
+    const mo=parseInt(p[0]), dy=parseInt(p[1]);
+    let yr = p[2] ? parseInt(p[2]) : new Date().getFullYear();
+    if (yr < 100) yr += 2000;
+    if (!isNaN(mo)&&!isNaN(dy)&&!isNaN(yr)) return new Date(yr, mo-1, dy);
+  }
+  const d = new Date(str); return isNaN(d) ? null : d;
+}
+function normalizeDate(str) {
+  if (!str) return '';
+  const d = parseAnyDate(str);
+  if (!d) return str;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function fmtDisp(str) {
   if (!str) return '—';
-  const d = new Date(str + 'T00:00:00');
-  return `${d.getMonth()+1}/${d.getDate()}`;
+  const d = parseAnyDate(str);
+  if (!d || isNaN(d)) return str;
+  return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(-2);
 }
 
 function buildIncomeTemplate(acct, year, month) {
@@ -541,24 +581,40 @@ async function loadMonthData(acct,y,m) {
       auto:(row[3]||'').toLowerCase().includes('auto')})).filter(b=>b.name);
   } catch(e){}
 
+  // Only seed if sheet header doesn't exist yet
   if (!bills.length) {
-    const master=acct==='house'?masterHouse:masterMy;
-    bills=master.filter(b=>b.active).map((b,i)=>({rowIdx:i+2,sheet:bs,
-      name:b.name,dueDay:b.dueDay,minPay:b.minPay,notes:b.notes,
-      datePaid:'',amtPaid:null,auto:(b.notes||'').toLowerCase().includes('auto')}));
-    if (bills.length){
-      await sheetsUpdate(`${bs}!A1:F1`,[['Name','DueDay','MinPayment','Notes','DatePaid','AmountPaid']]);
-      await sheetsUpdate(`${bs}!A2:F${bills.length+1}`,bills.map(b=>[b.name,b.dueDay||'',b.minPay||'',b.notes,'','']));
+    let billsSeeded = false;
+    try {
+      const hdr=await sheetsGet(`${bs}!A1:F1`);
+      billsSeeded = hdr.length > 0 && hdr[0][0] === 'Name';
+    } catch(e){}
+    if (!billsSeeded) {
+      const master=acct==='house'?masterHouse:masterMy;
+      bills=master.filter(b=>b.active).map((b,i)=>({rowIdx:i+2,sheet:bs,
+        name:b.name,dueDay:b.dueDay,minPay:b.minPay,notes:b.notes,
+        datePaid:'',amtPaid:null,auto:(b.notes||'').toLowerCase().includes('auto')}));
+      if (bills.length){
+        await sheetsUpdate(`${bs}!A1:F1`,[['Name','DueDay','MinPayment','Notes','DatePaid','AmountPaid']]);
+        await sheetsUpdate(`${bs}!A2:F${bills.length+1}`,bills.map(b=>[b.name,b.dueDay||'',b.minPay||'',b.notes,'','']));
+      }
     }
   }
 
+  // Check income header to know if sheet was already seeded
+  let incomeSeeded = false;
   try {
-    const r=await sheetsGet(`${is}!A2:D1000`);
-    income=r.map((row,i)=>({rowIdx:i+2,sheet:is,date:row[0]||'',desc:row[1]||'',
-      expected:row[2]?parseFloat(row[2]):null,actual:row[3]?parseFloat(row[3]):null})).filter(r=>r.desc);
+    const hdr=await sheetsGet(`${is}!A1:D1`);
+    incomeSeeded = hdr.length > 0 && hdr[0][0] === 'Date';
   } catch(e){}
 
-  if (!income.length) {
+  if (incomeSeeded) {
+    try {
+      const r=await sheetsGet(`${is}!A2:D1000`);
+      income=r.map((row,i)=>({rowIdx:i+2,sheet:is,date:row[0]||'',desc:row[1]||'',
+        expected:row[2]?parseFloat(row[2]):null,actual:row[3]?parseFloat(row[3]):null})).filter(r=>r.desc);
+    } catch(e){}
+  } else {
+    // Fresh sheet — seed it
     const tmpl=buildIncomeTemplate(acct,y,m);
     await sheetsUpdate(`${is}!A1:D1`,[['Date','Description','Expected','Actual']]);
     if (tmpl.length) await sheetsUpdate(`${is}!A2:D${tmpl.length+1}`,tmpl.map(r=>[r.date||'',r.desc,r.expected||'',r.actual||'']));
@@ -649,9 +705,10 @@ async function savePay() {
   const date=document.getElementById('modal-date').value;
   const amt =parseFloat(document.getElementById('modal-amount').value);
   if(!date||isNaN(amt)){toast('Enter a date and amount');return;}
-  b.datePaid=date; b.amtPaid=amt;
+  const normDate=normalizeDate(date);
+  b.datePaid=normDate; b.amtPaid=amt;
   try {
-    await sheetsUpdate(`${b.sheet}!E${b.rowIdx}:F${b.rowIdx}`,[[date,amt]]);
+    await sheetsUpdate(`${b.sheet}!E${b.rowIdx}:F${b.rowIdx}`,[[normDate,amt]]);
     toast(`${b.name} marked paid`);
     closeModal('pay-modal');
     renderBills(data.bills); renderStats(data.bills,data.income);
@@ -689,10 +746,12 @@ async function editInc(idx,field) {
   const val=window.prompt(labels[field],current[field]);
   if(val===null) return;
   const colMap={date:'A',desc:'B',expected:'C',actual:'D'};
-  if(field==='expected'||field==='actual'){const n=parseFloat(val);r[field]=val?n:null;}
+  let storeVal=val;
+  if(field==='expected'||field==='actual'){const n=parseFloat(val);r[field]=val?n:null;storeVal=val;}
+  else if(field==='date'){storeVal=normalizeDate(val);r[field]=storeVal;}
   else r[field]=val;
   try {
-    await sheetsUpdate(`${r.sheet}!${colMap[field]}${r.rowIdx}`,[[val]]);
+    await sheetsUpdate(`${r.sheet}!${colMap[field]}${r.rowIdx}`,[[storeVal]]);
     renderIncome(data.income); renderStats(data.bills,data.income);
     toast('Updated');
   } catch(e){toast('Save failed');}
@@ -713,7 +772,8 @@ async function saveIncomeLine() {
   const key=mKey(currentAcct,currentYear,currentMonth+1), data=monthData[key];
   const is=isn(currentAcct,currentYear,currentMonth+1);
   try {
-    const res=await sheetsAppend(`${is}!A2:D`,[[date||'',desc,exp||'',act||'']]);
+    const normIncDate=normalizeDate(date);
+    const res=await sheetsAppend(`${is}!A2:D`,[[normIncDate||'',desc,exp||'',act||'']]);
     const m=res.updates&&res.updates.updatedRange&&res.updates.updatedRange.match(/(\d+)$/);
     const newRow={rowIdx:m?parseInt(m[1]):data.income.length+2,sheet:is,
       date:date||'',desc,expected:exp?parseFloat(exp):null,actual:act?parseFloat(act):null};
@@ -861,7 +921,42 @@ function today(){return new Date().toISOString().slice(0,10);}
 function closeModal(id){document.getElementById(id).classList.remove('open');editingBill=null;}
 let toastTimer;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3000);}
-['pay-modal','income-modal','add-modal'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal(id);}));
+['pay-modal','income-modal','add-modal','onetime-modal'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal(id);}));
+
+
+// ── One-time bill (this month only) ──────────────────────────────────────────
+function openAddBillThisMonth() {
+  ['ot-name','ot-due','ot-min','ot-notes'].forEach(id=>document.getElementById(id).value='');
+  const sub = document.getElementById('onetime-modal-sub');
+  sub.textContent = `Adds to ${MONTHS[currentMonth]} ${currentYear} only — not the master list`;
+  document.getElementById('onetime-modal').classList.add('open');
+}
+
+async function saveOnetimeBill() {
+  const name  = document.getElementById('ot-name').value.trim();
+  const due   = document.getElementById('ot-due').value;
+  const min   = document.getElementById('ot-min').value;
+  const notes = document.getElementById('ot-notes').value.trim();
+  if (!name) { toast('Enter a bill name'); return; }
+  const key  = mKey(currentAcct, currentYear, currentMonth+1);
+  const data = monthData[key];
+  const bs   = sn(currentAcct, currentYear, currentMonth+1);
+  const newBill = {
+    rowIdx: data.bills.length + 2, sheet: bs,
+    name, dueDay: due ? parseInt(due) : null,
+    minPay: min ? parseFloat(min) : null,
+    notes, datePaid: '', amtPaid: null,
+    auto: notes.toLowerCase().includes('auto'),
+  };
+  try {
+    await sheetsAppend(`${bs}!A2:F`, [[name, due||'', min||'', notes, '', '']]);
+    data.bills.push(newBill);
+    closeModal('onetime-modal');
+    renderBills(data.bills);
+    renderStats(data.bills, data.income);
+    toast(`${name} added to ${MONTHS[currentMonth]}`);
+  } catch(e) { toast('Save failed'); }
+}
 
 initAuth();
 </script>

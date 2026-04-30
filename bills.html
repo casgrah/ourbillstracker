@@ -441,9 +441,9 @@ let _tt;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2500);}
 
 
-const CLIENT_ID   = '1049044356656-ecjtelk23gknpf1hc7kp3jt2kue56mlg.apps.googleusercontent.com';
+// removed duplicate: const CLIENT_ID   = '1049044356656-ecjtelk23gknpf1hc7kp3jt2k
 const SHEET_ID    = '1sDhXuYD9udlmzXi4UzGfqJ2QDFihCcJMRXBne2bFZpI';
-const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
+// removed duplicate: const SCOPES      = 'https://www.googleapis.com/auth/spreads
 const MONTHS      = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -490,7 +490,7 @@ function buildIncomeTemplate(acct, year, month) {
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let accessToken = null;
+// removed duplicate: let accessToken = null;
 let currentMonth = new Date().getMonth();
 let currentYear  = new Date().getFullYear();
 let currentAcct  = 'house';

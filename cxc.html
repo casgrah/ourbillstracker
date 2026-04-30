@@ -351,7 +351,6 @@ async function cxcAddSheet(title) { return addSheetTab(title, CXC_SID); }
 
 
 
-// removed duplicate: let accessToken = null;
 let orders = [];
 let statusFilter = 'all';
 let editingIdx = null;
@@ -746,6 +745,8 @@ function exportCSV(){
 
 let toastTimer;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3000);}
+
+
 
 function setSyncStatus(state, msg) {
   const d=document.getElementById('sdot'), t=document.getElementById('smsg');

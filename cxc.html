@@ -338,7 +338,7 @@ function toast(msg){const el=document.getElementById('toast');el.textContent=msg
 
 
 const CXC_SID = '11DuEx40pI_qXn9638AsAZTCb4CiISSnS1s1h4FXA8XQ';
-let SHEET_NAME = 'Orders';
+const SHEET_NAME = 'Orders';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // Wrap sheet calls for CXC
@@ -420,13 +420,9 @@ function ordersToRows(ords) {
 async function ensureSheet() {
   const sheets = await cxcSheets();
   if (!sheets.includes(SHEET_NAME)) {
-    if (sheets.length) {
-      SHEET_NAME = sheets[0];
-    } else {
-      await cxcAddSheet(SHEET_NAME);
-      await cxcPut(`${SHEET_NAME}!A1:M1`, [ORDER_HEADERS]);
-      return;
-    }
+    await cxcAddSheet(SHEET_NAME);
+    await cxcPut(`${SHEET_NAME}!A1:M1`, [ORDER_HEADERS]);
+    return;
   }
   const header = await cxcGet(`${SHEET_NAME}!A1:M1`);
   if (!header.length || !header[0].length) {
@@ -570,10 +566,10 @@ function buildFilters() {
   mTo.innerHTML='<option value="">To</option>'+moOpts;
   if(curF)mFrom.value=curF; if(curT)mTo.value=curT;
 }
-function setStatusFilter(f,btn) { statusFilter=f; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); }
+function setStatusFilter(f,btn) { statusFilter=f; document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); }
 function clearFilters() {
   document.getElementById('filterYear').value=''; document.getElementById('filterMonthFrom').value=''; document.getElementById('filterMonthTo').value='';
-  statusFilter='all'; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); document.getElementById('fb-all').classList.add('active'); render();
+  statusFilter='all'; document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active')); document.getElementById('fb-all').classList.add('active'); render();
 }
 function getFiltered() {
   const year=document.getElementById('filterYear').value;
@@ -599,47 +595,47 @@ function render() {
   document.getElementById('totalExpenses').textContent=fmt(exp);
   document.getElementById('totalProfit').textContent=fmt(prof);
   const snet=sc-sk; const plEl=document.getElementById('shippingPL'); const plSub=document.getElementById('shippingPLsub');
-  if(sc===0&&sk===0){plEl.textContent='—';plEl.className='stat-value neutral';plSub.textContent='';}
-  else{plEl.textContent=fmtSign(snet);plEl.className='stat-value '+(snet>=0?'success':'terra');plSub.textContent=fmt(sc)+' charged · '+fmt(sk)+' cost';}
+  if(sc===0&&sk===0){plEl.textContent='—';plEl.className='sval dim';plSub.textContent='';}
+  else{plEl.textContent=fmtSign(snet);plEl.className='sval '+(snet>=0?'success':'terra');plSub.textContent=fmt(sc)+' charged · '+fmt(sk)+' cost';}
 
   const list=document.getElementById('ordersList');
-  if(!filtered.length){list.innerHTML='<div class="empty-state"><div class="empty-dino">🦕</div><p>No orders match your filters.</p></div>';return;}
+  if(!filtered.length){list.innerHTML='<div class="empty"><div style="font-size:44px;margin-bottom:10px">🦕</div><p>No orders match your filters.</p></div>';return;}
   const DL={shipped:'🚚 Shipped',hand:'🤝 Hand Delivered',tbd:'⏳ TBD'};
-  const DC={shipped:'badge-shipped',hand:'badge-hand',tbd:'badge-tbd'};
+  const DC={shipped:'db-ship',hand:'db-hand',tbd:'db-tbd'};
   list.innerHTML=filtered.map(order=>{
     const ri=orders.indexOf(order); const c=calcOrder(order); const dm=order.deliveryMethod||'tbd';
     const isEditing=editingIdx===ri;
-    const fc=order.fulfillStatus==='complete'?'status-complete':'status-pending';
+    const fc=order.fulfillStatus==='complete'?'os-ok':'os-pend';
     const ft=order.fulfillStatus==='complete'?'Complete':'Pending';
     const itemRows=order.items.map(item=>{
       const sale=(item.qty||1)*(item.unitPrice||0); const profit=item.expense!=null?sale-item.expense:null;
-      return`<div class="line-item"><span class="item-name">${item.name||'Item'}</span><span class="item-num">${item.qty||1}</span><span class="item-num">${fmt(sale)}</span><span class="item-num">${item.expense!=null?fmt(item.expense):'<span class=\'tbd\'>TBD</span>'}</span><span class="item-profit">${profit!=null?fmt(profit):'<span class=\'tbd\'>TBD</span>'}</span><span></span></div>`;
+      return`<div class="li"><span class="iname">${item.name||'Item'}</span><span class="inum">${item.qty||1}</span><span class="inum">${fmt(sale)}</span><span class="inum">${item.expense!=null?fmt(item.expense):'<span class=\'tbd\'>TBD</span>'}</span><span class="iprofit">${profit!=null?fmt(profit):'<span class=\'tbd\'>TBD</span>'}</span><span></span></div>`;
     }).join('');
     let shipRow='';
-    if(dm==='hand')shipRow=`<div class="ship-detail-row"><span class="ship-detail-label">Delivery:</span><span class="delivery-badge badge-hand" style="margin-left:0">🤝 Hand delivered — no shipping</span></div>`;
-    else if(dm==='tbd')shipRow=`<div class="ship-detail-row"><span class="ship-detail-label">Delivery:</span><span class="tbd">TBD</span></div>`;
-    else if(c.shipCharged||c.shipCost){const net=c.shipCharged-c.shipCost;shipRow=`<div class="ship-detail-row"><span class="ship-detail-label">🚚 Ship:</span><span class="ship-detail-label">Charged</span><span class="ship-detail-val ship-charged">${c.shipCharged?fmt(c.shipCharged):'—'}</span><span class="ship-detail-label">Cost</span><span class="ship-detail-val ship-cost">${c.shipCost?fmt(c.shipCost):'—'}</span><span class="ship-detail-label">Net</span><span class="ship-detail-val ${net>=0?'ship-net-pos':'ship-net-neg'}">${fmtSign(net)}</span></div>`;}
-    else if(dm==='shipped')shipRow=`<div class="ship-detail-row"><span class="ship-detail-label">🚚 Shipped —</span><span class="tbd">shipping details TBD</span></div>`;
-    return`<div class="order-group" id="og-${ri}" style="${isEditing?'outline:2px solid var(--terra);outline-offset:-2px;':''}">
-      <div class="order-group-header" onclick="toggleGroup(${ri})">
-        <span class="order-id-badge">${order.id}</span>
-        <span class="order-customer">${order.customer}</span>
-        <span class="delivery-badge ${DC[dm]}">${DL[dm]}</span>
-        <span class="order-date">${order.date}</span>
-        <span class="order-status ${fc}">${ft}</span>
+    if(dm==='hand')shipRow=`<div class="sdr"><span class="sdl">Delivery:</span><span class="dbadge db-hand">🤝 Hand delivered — no shipping</span></div>`;
+    else if(dm==='tbd')shipRow=`<div class="sdr"><span class="sdl">Delivery:</span><span class="tbd">TBD</span></div>`;
+    else if(c.shipCharged||c.shipCost){const net=c.shipCharged-c.shipCost;shipRow=`<div class="sdr"><span class="sdl">🚚 Ship:</span><span class="sdl">Charged</span><span class="sdv sv-ch">${c.shipCharged?fmt(c.shipCharged):'—'}</span><span class="sdl">Cost</span><span class="sdv sv-co">${c.shipCost?fmt(c.shipCost):'—'}</span><span class="sdl">Net</span><span class="sdv ${net>=0?'sv-np':'sv-nn'}">${fmtSign(net)}</span></div>`;}
+    else if(dm==='shipped')shipRow=`<div class="sdr"><span class="sdl">🚚 Shipped —</span><span class="tbd">shipping details TBD</span></div>`;
+    return`<div class="ogroup" id="og-${ri}" style="${isEditing?'outline:2px solid var(--terra);outline-offset:-2px;':''}">
+      <div class="oghdr" onclick="toggleGroup(${ri})">
+        <span class="oid">${order.id}</span>
+        <span class="ocust">${order.customer}</span>
+        <span class="dbadge ${DC[dm]}">${DL[dm]}</span>
+        <span class="odate">${order.date}</span>
+        <span class="ostatus ${fc}">${ft}</span>
         <span class="chevron open" id="chev-${ri}">▾</span>
       </div>
       <div id="group-body-${ri}">
         ${itemRows}${shipRow}
-        <div class="order-subtotal">
-          ${order.notes?`<span class="order-note">${order.notes}</span>`:''}
-          <span class="subtotal-item"><span class="subtotal-label">Sale:</span><span class="subtotal-val">${fmt(c.totalSale)}</span></span>
-          <span class="subtotal-item"><span class="subtotal-label">Exp:</span><span class="subtotal-val" style="color:var(--terra)">${fmt(c.totalExp)}</span></span>
-          <span class="subtotal-item"><span class="subtotal-label">Profit:</span><span class="subtotal-val" style="color:var(--success)">${fmt(c.profit)}</span></span>
-          <span class="subtotal-item"><span class="subtotal-label">Margin:</span><span class="subtotal-val">${pct(c.margin)}</span></span>
-          <span class="row-actions">
-            <button class="icon-btn edit" onclick="event.stopPropagation();startEdit(${ri})" title="Edit">✏️</button>
-            <button class="icon-btn del" onclick="event.stopPropagation();deleteOrder(${ri})" title="Delete">✕</button>
+        <div class="osub">
+          ${order.notes?`<span class="onote">${order.notes}</span>`:''}
+          <span class="si"><span class="sl">Sale:</span><span class="sv">${fmt(c.totalSale)}</span></span>
+          <span class="si"><span class="sl">Exp:</span><span class="sv" style="color:var(--terra)">${fmt(c.totalExp)}</span></span>
+          <span class="si"><span class="sl">Profit:</span><span class="sv" style="color:var(--success)">${fmt(c.profit)}</span></span>
+          <span class="si"><span class="sl">Margin:</span><span class="sv">${pct(c.margin)}</span></span>
+          <span class="racts">
+            <button class="ibtn" onclick="event.stopPropagation();startEdit(${ri})" title="Edit">✏️</button>
+            <button class="ibtn" onclick="event.stopPropagation();deleteOrder(${ri})" title="Delete">✕</button>
           </span>
         </div>
       </div>
@@ -682,7 +678,7 @@ function startEdit(idx) {
   },10);
   document.getElementById('lineItemsContainer').innerHTML=''; lineCount=0;
   for(const item of o.items) addLineItem(item.name,item.qty,item.unitPrice,item.expense!=null?item.expense:'');
-  document.querySelector('.form-card').scrollIntoView({behavior:'smooth'});
+  document.querySelector('.fcard').scrollIntoView({behavior:'smooth'});
   render();
 }
 function cancelEdit(){editingIdx=null;document.getElementById('formTitle').textContent='+ New Order';document.getElementById('formBadge').style.display='none';document.getElementById('submitBtn').textContent='Save Order 🦕';document.getElementById('cancelBtn').style.display='none';resetForm();render();}
@@ -696,9 +692,9 @@ function updateShipFields(){
 }
 function addLineItem(name='',qty='',price='',expense=''){
   lineCount++; const id=`li-${lineCount}`; const div=document.createElement('div');
-  div.className='line-item-form'; div.id=id;
+  div.className='lif'; div.id=id;
   const first=document.getElementById('lineItemsContainer').children.length===0;
-  div.innerHTML=`<div>${first?'<label>Item</label>':''}<input type="text" placeholder="Item name" value="${name}" class="li-name"></div><div>${first?'<label>Qty</label>':''}<input type="number" placeholder="1" value="${qty}" min="1" class="li-qty" style="text-align:center"></div><div>${first?'<label>Price</label>':''}<input type="number" placeholder="0.00" value="${price}" step="0.01" min="0" class="li-price"></div><div>${first?'<label>Expense</label>':''}<input type="number" placeholder="0.00" value="${expense}" step="0.01" min="0" class="li-expense"></div>${lineCount>1?`<button class="remove-line" onclick="removeLine('${id}')">✕</button>`:'<span></span>'}`;
+  div.innerHTML=`<div>${first?'<label>Item</label>':''}<input type="text" placeholder="Item name" value="${name}" class="li-name"></div><div>${first?'<label>Qty</label>':''}<input type="number" placeholder="1" value="${qty}" min="1" class="li-qty" style="text-align:center"></div><div>${first?'<label>Price</label>':''}<input type="number" placeholder="0.00" value="${price}" step="0.01" min="0" class="li-price"></div><div>${first?'<label>Expense</label>':''}<input type="number" placeholder="0.00" value="${expense}" step="0.01" min="0" class="li-expense"></div>${lineCount>1?`<button class="rml" onclick="removeLine('${id}')">✕</button>`:'<span></span>'}`;
   document.getElementById('lineItemsContainer').appendChild(div);
 }
 function removeLine(id){const el=document.getElementById(id);if(el)el.remove();}
@@ -713,7 +709,7 @@ function resetForm(){
 async function submitOrder(){
   const customer=document.getElementById('customer').value.trim();
   if(!customer){toast('Please enter a customer name.');return;}
-  const lineEls=document.querySelectorAll('#lineItemsContainer .line-item-form');
+  const lineEls=document.querySelectorAll('#lineItemsContainer .lif');
   const items=[];
   for(const el of lineEls){
     const name=el.querySelector('.li-name').value.trim();
